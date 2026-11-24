@@ -69,9 +69,14 @@ jobs:
           # which is the only way a session-gated upstream accepts it.
           if job.get('twoHop'):
               import subprocess as sp
+              # curl's cookie jar SKIPS `__Secure-`/`__Host-` cookies written over a plain-http view of
+              # the response, and chatday's session cookies are both __Secure- and HttpOnly. Measured:
+              # the jar ended up holding only `chatday_device_id`, so hop 2 arrived with no session and
+              # the API answered 400 bad_request. So the Set-Cookie headers are captured verbatim from
+              # the response and replayed as an explicit Cookie header instead of relying on the jar.
               jar = 'cookies.txt'
               s_head = f"{job['signInUrl']}"
-              cmd1 = ['curl', '-sS', '-L', '-c', jar, '--max-time', '120', '-X', 'POST',
+              cmd1 = ['curl', '-sS', '-L', '-D', 'signin_headers.txt', '--max-time', '120', '-X', 'POST',
                       '-o', 'signin.bin', '-w', '%{http_code}', s_head]
               for k, v in (job.get('signInHeaders') or {}).items():
                   cmd1 += ['-H', f'{k}: {v}']
@@ -80,13 +85,19 @@ jobs:
               cmd1 += ['--data-binary', '@signin_payload.bin']
               s1 = sp.run(cmd1, capture_output=True, check=False).stdout.decode().strip() or '0'
               print('two-hop signin status', s1)
+              # Collect every Set-Cookie across all hops (redirects included) and reduce each to name=value.
+              cookie_parts = []
               try:
-                  print('jar entries:', sum(1 for _ in open(jar)))
-                  for ln in open(jar):
-                      if ln.strip() and not ln.startswith('#'):
-                          print('jar:', ln.split('\t')[0].replace('#HttpOnly_', ''), ln.split('\t')[5][:24])
+                  for block in open('signin_headers.txt', encoding='utf8', errors='replace').read().split('\r\n\r\n'):
+                      for line in block.splitlines():
+                          if line.lower().startswith('set-cookie:'):
+                              pair = line.split(':', 1)[1].split(';')[0].strip()
+                              if pair and '=' in pair:
+                                  cookie_parts.append(pair)
               except Exception as e:
-                  print('jar read failed', e)
+                  print('set-cookie read failed', e)
+              cookie_hdr = '; '.join(dict.fromkeys(cookie_parts))
+              print('cookies captured:', len(cookie_parts), '->', [c.split('=')[0] for c in cookie_parts])
               if str(s1) != '200':
                   out = {'id': job.get('id'), 'address': os.environ.get('EGRESS_ADDR'), 'status': 401,
                          'headers': {'x-egress-address': os.environ.get('EGRESS_ADDR', 'unknown')},
@@ -100,9 +111,11 @@ jobs:
                   except Exception:
                       print('signin body: unreadable')
                   hdrs = job.get('headers') or {}
-                  cmd2 = ['curl', '-sS', '-L', '-b', jar, '-c', jar, '--max-time', '840', '-X',
+                  cmd2 = ['curl', '-sS', '-L', '--max-time', '840', '-X',
                           (job.get('method') or 'POST').upper(), '-D', 'headers.txt', '-o', 'body.bin',
                           '-H', 'Expect:', '-w', '%{http_code}', job['url']]
+                  if cookie_hdr:
+                      cmd2 += ['-H', f'Cookie: {cookie_hdr}']
                   for k, v in hdrs.items():
                       cmd2 += ['-H', f'{k}: {v}']
                   bb = job.get('body')
