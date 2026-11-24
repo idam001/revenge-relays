@@ -79,6 +79,14 @@ jobs:
               open('signin_payload.bin', 'w').write(sb if isinstance(sb, str) else json.dumps(sb))
               cmd1 += ['--data-binary', '@signin_payload.bin']
               s1 = sp.run(cmd1, capture_output=True, check=False).stdout.decode().strip() or '0'
+              print('two-hop signin status', s1)
+              try:
+                  print('jar entries:', sum(1 for _ in open(jar)))
+                  for ln in open(jar):
+                      if ln.strip() and not ln.startswith('#'):
+                          print('jar:', ln.split('\t')[0].replace('#HttpOnly_', ''), ln.split('\t')[5][:24])
+              except Exception as e:
+                  print('jar read failed', e)
               if str(s1) != '200':
                   out = {'id': job.get('id'), 'address': os.environ.get('EGRESS_ADDR'), 'status': 401,
                          'headers': {'x-egress-address': os.environ.get('EGRESS_ADDR', 'unknown')},
