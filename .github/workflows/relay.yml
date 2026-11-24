@@ -89,7 +89,7 @@ jobs:
                   hdrs = job.get('headers') or {}
                   cmd2 = ['curl', '-sS', '-L', '-b', jar, '-c', jar, '--max-time', '840', '-X',
                           (job.get('method') or 'POST').upper(), '-D', 'headers.txt', '-o', 'body.bin',
-                          '-w', '%{http_code}', job['url']]
+                          '-H', 'Expect:', '-w', '%{http_code}', job['url']]
                   for k, v in hdrs.items():
                       cmd2 += ['-H', f'{k}: {v}']
                   bb = job.get('body')
@@ -117,7 +117,7 @@ jobs:
           headers = {k: str(v) for k, v in (job.get('headers') or {}).items()}
           headers.setdefault('user-agent', 'Mozilla/5.0 (compatible; revenge-runner-fabric/1.0)')
           cmd = ['curl', '-sS', '-L', '--max-time', '840', '-X', method,
-                 '-D', 'headers.txt', '-o', 'body.bin', '-w', '%{http_code}', url]
+                 '-D', 'headers.txt', '-o', 'body.bin', '-H', 'Expect:', '-w', '%{http_code}', url]
           for k, v in headers.items():
               cmd += ['-H', f'{k}: {v}']
           body = job.get('body')
