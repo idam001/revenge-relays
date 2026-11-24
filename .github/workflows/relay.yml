@@ -94,6 +94,11 @@ jobs:
                   json.dump(out, open('response.json', 'w'))
                   print('two-hop sign-in failed', s1)
               else:
+                  try:
+                      sb = open('signin.bin', 'rb').read()
+                      print('signin body:', sb[:200])
+                  except Exception:
+                      print('signin body: unreadable')
                   hdrs = job.get('headers') or {}
                   cmd2 = ['curl', '-sS', '-L', '-b', jar, '-c', jar, '--max-time', '840', '-X',
                           (job.get('method') or 'POST').upper(), '-D', 'headers.txt', '-o', 'body.bin',
@@ -114,6 +119,7 @@ jobs:
                                   k2, v2 = line.split(':', 1)
                                   h[k2.strip().lower()] = v2.strip()
                   h['x-egress-address'] = os.environ.get('EGRESS_ADDR', 'unknown')
+                  print('two-hop chat status', st, 'raw:', raw[:300])
                   out = {'id': job.get('id'), 'address': os.environ.get('EGRESS_ADDR'),
                          'status': int(st) or 502, 'headers': h,
                          'body_b64': base64.b64encode(raw).decode()}
